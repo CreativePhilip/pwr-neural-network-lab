@@ -1,0 +1,4 @@
+.idea/
+.venv/
+
+nn_labs/affnist/training_and_validation_batches/
