@@ -7,7 +7,14 @@ from nn_labs.nn.initializers import BaseInitializer, HomogenousRandomInitializer
 
 
 class BaseLayer:
+    weights: NDArray
+    biases: NDArray
+
     output: NDArray
+
+    d_weights: NDArray
+    d_bias: NDArray
+    d_inputs: NDArray
 
     def forward(self, inputs: NDArray) -> NDArray:
         raise NotImplementedError

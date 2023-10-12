@@ -2,6 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from nn_labs.nn.activation_functions import ReLU, BaseActivationFunction, SoftMax
+from nn_labs.nn.initializers import GeohotInitializer
 from nn_labs.nn.layers import DenseLayer, BaseLayer
 from nn_labs.nn.perf import CategoricalCrossEntropyLoss
 
@@ -38,14 +39,30 @@ class NeuralNetwork:
 
         return current_vec
 
+    def backwards(self, d_loss: NDArray):
+        current_gradient = d_loss
+
+        layer: BaseLayer
+        activation_fn: BaseActivationFunction
+
+        for layer, activation_fn in zip(
+            reversed(self.layers),
+            reversed(self.activation_fns),
+            strict=True,
+        ):
+            activation_fn.backward(current_gradient)
+            layer.backward(activation_fn.d_inputs)
+
+            current_gradient = layer.d_inputs
+
     def _initialize_layers(self) -> list[BaseLayer]:
         layers: list[BaseLayer] = [DenseLayer(self.input_dim, self.hidden_dim)]
 
         for _ in range(self.number_of_hidden_layers):
-            layer = DenseLayer(self.hidden_dim, self.hidden_dim)
+            layer = DenseLayer(self.hidden_dim, self.hidden_dim, weights_initializer=GeohotInitializer)
             layers.append(layer)
 
-        layers.append(DenseLayer(self.hidden_dim, self.output_dim))
+        layers.append(DenseLayer(self.hidden_dim, self.output_dim, weights_initializer=GeohotInitializer))
 
         return layers
 
