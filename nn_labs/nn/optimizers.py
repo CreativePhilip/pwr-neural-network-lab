@@ -17,10 +17,10 @@ class PhilipOptimizer:
         self.loss_fn = CategoricalCrossEntropyLoss()
 
     def run_optimize(self, x: NDArray, y: NDArray):
-        for epoch in trange(self.epochs):
-            self._run_optimize(x, y)
+        for epoch in range(self.epochs):
+            self._run_optimize(x, y, epoch)
 
-    def _run_optimize(self, x: NDArray, y: NDArray):
+    def _run_optimize(self, x: NDArray, y: NDArray, epoch: int):
         batch_count = x.shape[0] // self.batch_size
 
         for batch_no in range(batch_count):
@@ -35,9 +35,10 @@ class PhilipOptimizer:
             acc = self.accuracy_fn.calculate(predictions, y_window)
             loss = self.loss_fn.calculate(predictions, y_window)
 
-            print(f"Batch({batch_no}/{batch_count}) - acc[{acc:.3f}] - loss[{loss:.3f}]")
+            if epoch % 100 == 0:
+                print(f"{epoch}  --  acc[{acc:.3f}] - loss[{loss:.3f}]")
 
-            self.loss_fn.backward(self.network.activation_fns[-1].output, y_window)
+            self.loss_fn.backward(predictions, y_window)
 
             self.network.backwards(self.loss_fn.d_inputs)
 
@@ -45,5 +46,5 @@ class PhilipOptimizer:
 
     def _apply_optimization(self):
         for layer in self.network.layers:
-            layer.weights = -self.learning_rate * layer.d_weights
-            layer.biases = -self.learning_rate * layer.d_bias
+            layer.weights += -self.learning_rate * layer.d_weights
+            layer.biases += -self.learning_rate * layer.d_bias

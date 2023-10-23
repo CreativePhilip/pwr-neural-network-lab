@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from nn_labs.nn.activation_functions import ReLU, BaseActivationFunction, SoftMax
-from nn_labs.nn.initializers import GeohotInitializer
+from nn_labs.nn.initializers import GeohotInitializer, HomogenousRandomInitializer
 from nn_labs.nn.layers import DenseLayer, BaseLayer
 from nn_labs.nn.perf import CategoricalCrossEntropyLoss
 
@@ -62,7 +62,7 @@ class NeuralNetwork:
             layer = DenseLayer(self.hidden_dim, self.hidden_dim, weights_initializer=GeohotInitializer)
             layers.append(layer)
 
-        layers.append(DenseLayer(self.hidden_dim, self.output_dim, weights_initializer=GeohotInitializer))
+        layers.append(DenseLayer(self.hidden_dim, self.output_dim, weights_initializer=HomogenousRandomInitializer))
 
         return layers
 

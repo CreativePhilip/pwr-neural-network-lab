@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import scipy
 from scipy.io.matlab import loadmat
 
@@ -27,13 +28,22 @@ def load_matlab(file: str):
     data = loadmat(file, struct_as_record=False, squeeze_me=True)
     data = _check_keys(data)
 
-    x = data["affNISTdata"]["image"].transpose()
+    x = data["affNISTdata"]["image"].transpose() / 255
     y = data["affNISTdata"]["label_int"]
 
     return x, y
 
 
-def load_affnist(page: int) -> tuple[NDArray, NDArray]:
-    path = Path(__file__).parent / f"training_and_validation_batches/{page}.mat"
+def _path(page: int) -> Path:
+    return Path(__file__).parent / f"training_and_validation_batches/{page}.mat"
 
-    return load_matlab(str(path))
+
+def load_affnist(page: int | list[int]) -> tuple[NDArray, NDArray]:
+    page_numbers = page if isinstance(page, list) else [page]
+    page_paths = [_path(no) for no in page_numbers]
+    data_pages = [load_matlab(str(page)) for page in page_paths]
+
+    data_pages_x = [page[0] for page in data_pages]
+    data_pages_y = [page[1] for page in data_pages]
+
+    return np.concatenate(data_pages_x), np.concatenate(data_pages_y)
