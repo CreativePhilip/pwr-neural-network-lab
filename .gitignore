@@ -2,3 +2,6 @@
 .venv/
 
 nn_labs/affnist/training_and_validation_batches/
+
+nn_labs/image_net/wandb/
+nn_labs/image_net/models

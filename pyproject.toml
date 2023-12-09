@@ -13,6 +13,10 @@ matplotlib = "^3.8.0"
 torch = "^2.1.0"
 torchvision = "^0.16.0"
 tqdm = "^4.66.1"
+nnfs = "^0.5.1"
+wandb = "^0.15.12"
+umap-learn = "^0.5.5"
+numba = "^0.58.1"
 
 [tool.black]
 line-length = 120

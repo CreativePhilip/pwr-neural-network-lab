@@ -55,3 +55,13 @@ class SoftMax(BaseActivationFunction):
             d_inputs[idx] = np.dot(jacobian_matrix, d_value)
 
         self.d_inputs = d_inputs
+
+
+class Sigmoid(BaseActivationFunction):
+    def forward(self, inputs: NDArray) -> NDArray:
+        self.output = 1 / (1 + np.exp(-inputs))
+
+        return self.output
+
+    def backward(self, d_values: NDArray) -> None:
+        self.d_inputs = d_values * (1 - self.output) * self.output

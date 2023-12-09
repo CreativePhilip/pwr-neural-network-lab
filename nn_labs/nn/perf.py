@@ -55,6 +55,15 @@ class CategoricalCrossEntropyLoss(Loss):
         raise ValueError(f"Unexpected shape of expected values: {expected.shape}")
 
 
+class MSELoss(Loss):
+    def forward(self, values: NDArray, expected: NDArray) -> NDArray:
+        return (values - expected) ** 2
+
+    def backward(self, d_values: NDArray, expected: NDArray):
+        self.d_inputs = 2 * (d_values - expected) / d_values.shape[1]
+        # self.d_inputs = self.d_inputs / d_values.shape[0]
+
+
 class Accuracy:
     @staticmethod
     def calculate(values: NDArray, expected: NDArray):
