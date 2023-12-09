@@ -1,7 +1,7 @@
+import math
 from typing import Type
 
 import numpy as np
-from numba import njit
 from numpy.typing import NDArray
 from numpy.lib.stride_tricks import as_strided
 
@@ -98,125 +98,102 @@ class Conv2D(BaseLayer):
     def __init__(
         self,
         in_channels: int,
-        out_channels: int,
         kernel_size: int,
         kernel_count: int,
         stride=1,
         padding=0,
     ):
         self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = (kernel_size, kernel_size)
+        self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
 
         self.kernel_count = kernel_count
-        self.kernel = (
-            GeohotInitializer(np.array([kernel_size * kernel_size, kernel_count]))
-            .initialize()
-            .reshape((kernel_size, kernel_size, -1))
-        )
+        self.kernel = np.random.randn(
+            self.kernel_count, self.in_channels, self.kernel_size, self.kernel_size
+        ) * np.sqrt(2.0 / (self.in_channels * self.kernel_size * self.kernel_size))
+        self.biases = np.zeros(self.kernel_count)
 
         self.input = None
 
     def forward(self, inputs: NDArray) -> NDArray:
-        self.input = inputs
-        view_shape = tuple(np.subtract(inputs[0].shape[:2], self.kernel_size) + 1) + self.kernel_size
+        self.input = np.pad(
+            inputs,
+            ((0, 0), (0, 0), (self.padding, self.padding), (self.padding, self.padding)),
+            mode="constant",
+        )
+        in_strides = self.input.strides
 
-        strides = self._conv2d__generate_strides(inputs, view_shape, self.kernel_size)
-        initial_strides_shape = strides.shape
+        bs, in_channels, input_h, input_w = self.input.shape
+        output_h = math.ceil((input_h - self.kernel_size) / self.stride)
+        output_w = math.ceil(input_w - self.kernel_size / self.stride)
 
-        strides = strides.reshape((*initial_strides_shape[:3], initial_strides_shape[4] * 2))
-        strides = np.tile(strides, self.kernel_count)
-        strides = strides.reshape(
-            (
-                *initial_strides_shape[:3],
-                *self.kernel_size,
-                self.kernel_count,
-            )
+        self.output = np.zeros((bs, self.kernel_count, output_h, output_w))
+
+        stride_view = as_strided(
+            self.input,
+            shape=(bs, in_channels, output_h, output_w, self.kernel_size, self.kernel_size),
+            strides=(*in_strides[:2], in_strides[2] * self.stride, in_strides[3] * self.stride, *in_strides[2:]),
         )
 
-        out = strides * self.kernel
-        self.output = np.mean(out, axis=(1, 2))
+        for kernel_idx, kernel in enumerate(self.kernel):
+            self.output[:, kernel_idx, :, :] = np.tensordot(stride_view, kernel, axes=([1, 4, 5], [0, 1, 2]))
+
+        self.output = np.maximum(0, self.output)
 
         return self.output
 
     def backward(self, d_values: NDArray) -> None:
         pass
 
-    @staticmethod
-    def _conv2d__generate_strides(
-        inputs: NDArray,
-        view_shape: tuple[int, ...],
-        kernel_size: tuple[int, int],
-        stride_offset: int = 1,
-    ) -> NDArray:
-        out_strides = np.zeros((inputs.shape[0], view_shape[0], view_shape[1], *kernel_size))
-
-        for idx, image in enumerate(inputs):
-            arr_view = as_strided(
-                image,
-                shape=view_shape,
-                strides=(image.strides[0] * stride_offset, image.strides[1] * stride_offset) + image.strides,
-            )
-
-            out_strides[idx] = arr_view
-
-        return out_strides
-
 
 class MaxPool2D(BaseLayer):
     def __init__(
         self,
-        in_channels: int,
-        out_channels: int,
         kernel_size: int,
         stride=1,
-        padding=0,
     ):
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = (kernel_size, kernel_size)
+        self.kernel_size = kernel_size
         self.stride = stride
-        self.padding = padding
 
         self.input = None
 
     def forward(self, inputs: NDArray) -> NDArray:
         self.input = inputs
+        in_strides = self.input.strides
 
-        view_shape = (
-            (
-                inputs.shape[1] // self.kernel_size[0],
-                inputs.shape[2] // self.kernel_size[0],
-            )
-            + self.kernel_size
-            + (inputs.shape[-1],)
+        bs, kernels, input_h, input_w = inputs.shape
+
+        output_h = math.ceil((input_h - self.kernel_size) / self.stride)
+        output_w = math.ceil((input_w - self.kernel_size) / self.stride)
+
+        stride_view = as_strided(
+            self.input,
+            shape=(bs, kernels, output_h, output_w, self.kernel_size, self.kernel_size),
+            strides=(
+                *in_strides[:2],
+                in_strides[2] * self.kernel_size,
+                in_strides[3] * self.kernel_size,
+                *in_strides[2:],
+            ),
         )
 
-        strides = self._generate_strides(
-            inputs,
-            view_shape,
-            stride_offset=self.stride,
-        )
+        self.output = np.max(stride_view, axis=(4, 5))
 
-        return np.max(strides, axis=(-1, -2))
+        return self.output
 
-    @staticmethod
-    def _generate_strides(
-        inputs: NDArray,
-        view_shape: tuple[int, ...],
-        stride_offset: int = 1,
-    ) -> NDArray:
-        out_strides = np.zeros((inputs.shape[0], *view_shape))
 
-        for idx, image in enumerate(inputs):
-            arr_view = as_strided(
-                image,
-                shape=view_shape,
-                strides=(image.strides[0] * stride_offset, image.strides[1] * stride_offset) + image.strides,
-            )
+class Flatten(BaseLayer):
+    def __init__(self):
+        self.input = None
+        self.in_shape_cache = None
 
-            out_strides[idx] = arr_view
+    def forward(self, inputs: NDArray) -> NDArray:
+        self.input = inputs
+        self.in_shape_cache = inputs.shape
+        self.output = inputs.reshape(inputs.shape[0], -1)
 
-        return out_strides
+        return self.output
+
+    def backward(self, d_values: NDArray) -> None:
+        self.d_inputs = d_values.reshape(self.in_shape_cache)
