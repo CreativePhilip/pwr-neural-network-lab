@@ -137,6 +137,7 @@ class Conv2D(BaseLayer):
         )
 
         for kernel_idx, kernel in enumerate(self.kernel):
+            # add bias
             self.output[:, kernel_idx, :, :] = np.tensordot(stride_view, kernel, axes=([1, 4, 5], [0, 1, 2]))
 
         self.output = np.maximum(0, self.output)
@@ -144,7 +145,60 @@ class Conv2D(BaseLayer):
         return self.output
 
     def backward(self, d_values: NDArray) -> None:
-        pass
+        d_values = d_values * (self.output > 0)
+
+        bs, input_channels, input_h, input_w = self.input.shape
+        _, _, output_h, output_w = d_values.shape
+        in_strides = self.input.strides
+
+        self.d_weights = np.zeros_like(self.kernel)
+        self.d_bias = np.zeros_like(self.biases)
+        self.d_inputs = np.zeros_like(self.input)
+
+        stride_view_kernel = as_strided(
+            self.input,
+            shape=(bs, input_channels, output_h, output_w, self.kernel_size, self.kernel_size),
+            strides=(*in_strides[:2], in_strides[2] * self.stride, in_strides[3] * self.stride, *in_strides[2:]),
+        )
+
+        for idx in range(self.kernel_count):
+            kern_d_values = d_values[:, idx, :, :].reshape(bs, 1, output_h, output_w, 1, 1)
+            self.d_weights[idx] = np.sum(stride_view_kernel * kern_d_values, axis=(0, 2, 3))
+            self.d_bias[idx] = np.sum(d_values[:, idx, :, :], axis=(0, 1, 2))
+
+        inv_kernel = self.kernel[:, :, ::-1, ::-1]
+        d_values_with_pad = np.pad(
+            d_values,
+            (
+                (0, 0),
+                (0, 0),
+                (self.kernel_size - 1, self.kernel_size - 1),
+                (self.kernel_size - 1, self.kernel_size - 1),
+            ),
+            mode="constant",
+        )
+        d_values_with_pad_strides = d_values_with_pad.strides
+
+        out_stride = as_strided(
+            d_values_with_pad,
+            shape=(bs, self.kernel_count, input_h, input_w, self.kernel_size, self.kernel_size),
+            strides=(
+                *d_values_with_pad_strides[:2],
+                d_values_with_pad_strides[2] * self.stride,
+                d_values_with_pad_strides[3] * self.stride,
+                *d_values_with_pad_strides[2:],
+            ),
+        )
+
+        print(out_stride.shape)
+        print(inv_kernel.shape)
+
+        self.d_inputs = np.tensordot(out_stride, inv_kernel, axes=((1, 4, 5), (0, 2, 3)))
+
+        print(self.d_inputs.shape)
+        print("-" * 69)
+        if self.padding != 0:
+            self.d_inputs = self.d_inputs[:, :, self.padding : -self.padding, self.padding : -self.padding]
 
 
 class MaxPool2D(BaseLayer):
@@ -172,8 +226,8 @@ class MaxPool2D(BaseLayer):
             shape=(bs, kernels, output_h, output_w, self.kernel_size, self.kernel_size),
             strides=(
                 *in_strides[:2],
-                in_strides[2] * self.kernel_size,
-                in_strides[3] * self.kernel_size,
+                in_strides[2] * self.stride,
+                in_strides[3] * self.stride,
                 *in_strides[2:],
             ),
         )
@@ -181,6 +235,42 @@ class MaxPool2D(BaseLayer):
         self.output = np.max(stride_view, axis=(4, 5))
 
         return self.output
+
+    def backward(self, d_values: NDArray) -> None:
+        bs, kernels, input_h, input_w = self.input.shape
+        in_strides = self.input.strides
+
+        output_h = d_values.shape[2]
+        output_w = d_values.shape[3]
+
+        stride_view = as_strided(
+            self.input,
+            shape=(bs, kernels, output_h, output_w, self.kernel_size, self.kernel_size),
+            strides=(
+                *in_strides[:2],
+                in_strides[2] * self.stride,
+                in_strides[3] * self.stride,
+                *in_strides[2:],
+            ),
+        )
+
+        self.d_inputs = np.zeros_like(self.input)
+
+        for h in range(output_h):
+            for w in range(output_w):
+                max_indices = np.argmax(stride_view[:, :, h, w].reshape(bs, kernels, -1), axis=2)
+                max_coords = np.unravel_index(max_indices, (self.kernel_size, self.kernel_size))
+
+                for batch in range(bs):
+                    for kernel in range(kernels):
+                        coord_1 = max_coords[0][batch, kernel]
+                        coord_2 = max_coords[1][batch, kernel]
+
+                        h_start = h * self.stride
+                        w_start = w * self.stride
+
+                        local_err = d_values[batch, kernel, h, w]
+                        self.d_inputs[batch, kernel, h_start + coord_1, w_start + coord_2] += local_err
 
 
 class Flatten(BaseLayer):
