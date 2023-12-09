@@ -138,7 +138,11 @@ class Conv2D(BaseLayer):
 
         for kernel_idx, kernel in enumerate(self.kernel):
             # add bias
-            self.output[:, kernel_idx, :, :] = np.tensordot(stride_view, kernel, axes=([1, 4, 5], [0, 1, 2]))
+            self.output[:, kernel_idx, :, :] = np.tensordot(
+                stride_view,
+                kernel,
+                axes=([1, 4, 5], [0, 1, 2]),
+            )
 
         self.output = np.maximum(0, self.output)
 
@@ -190,15 +194,17 @@ class Conv2D(BaseLayer):
             ),
         )
 
-        print(out_stride.shape)
-        print(inv_kernel.shape)
+        # print(out_stride.shape)
+        # print(inv_kernel.shape)
 
         self.d_inputs = np.tensordot(out_stride, inv_kernel, axes=((1, 4, 5), (0, 2, 3)))
 
-        print(self.d_inputs.shape)
-        print("-" * 69)
+        # print(self.d_inputs.shape)
+        # print("-" * 69)
         if self.padding != 0:
             self.d_inputs = self.d_inputs[:, :, self.padding : -self.padding, self.padding : -self.padding]
+
+        self.d_inputs = self.d_inputs.transpose((0, 3, 1, 2))
 
 
 class MaxPool2D(BaseLayer):

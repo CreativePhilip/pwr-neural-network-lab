@@ -2,6 +2,7 @@ from nn_labs.nn.network import NeuralNetwork
 from numpy.typing import NDArray
 
 from nn_labs.nn.perf import Accuracy, CategoricalCrossEntropyLoss
+from nn_labs.nn.layers import DenseLayer, Conv2D
 
 from tqdm import trange
 
@@ -61,5 +62,9 @@ class PhilipOptimizer2:
 
     def step(self):
         for layer in self.network.layers:
-            layer.weights += -self.learning_rate * layer.d_weights
-            layer.biases += -self.learning_rate * layer.d_bias
+            if isinstance(layer, DenseLayer):
+                layer.weights += -self.learning_rate * layer.d_weights
+                layer.biases += -self.learning_rate * layer.d_bias
+            elif isinstance(layer, Conv2D):
+                layer.kernel += -self.learning_rate * layer.d_weights
+                layer.biases += -self.learning_rate * layer.d_bias
