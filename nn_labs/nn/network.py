@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -150,3 +152,36 @@ class AutoEncoderNetwork(NeuralNetwork):
         fns[-1] = Sigmoid()
 
         return fns
+
+
+from nn_labs.nn.layers import BaseLayer
+from nn_labs.nn.activation_functions import BaseActivationFunction
+
+from numpy.typing import NDArray
+
+
+class NetworkV2:
+    def __init__(self):
+        self.layers: list[BaseLayer | BaseActivationFunction] = []
+
+    def add_layer(self, l: BaseLayer | BaseActivationFunction):
+        self.layers.append(l)
+
+    def forward(self, x_in: NDArray) -> NDArray:
+        current = x_in
+
+        for layer in self.layers:
+            current = layer.forward(current)
+
+        return current
+
+    def backward(self, d_loss: NDArray):
+        current_gradient = d_loss
+
+        for layer in reversed(self.layers):
+            layer.backward(current_gradient)
+
+            current_gradient = layer.d_inputs
+
+    def save(self, name: str):
+        pickle.dump(self, open(name, "wb"))
